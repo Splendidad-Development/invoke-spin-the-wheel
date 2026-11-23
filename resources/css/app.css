@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme inline {
+    /* Design: Avenir Next (UI) and Futura (wheel numbers). Nunito Sans / Jost are the web fallbacks. */
+    --font-sans:
+        'Avenir Next', 'Nunito Sans', ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-wheel: Futura, 'Futura Std', Jost, ui-sans-serif, sans-serif;
+}
+
+@theme {
+    --color-headline: #ffd100;
+    --color-wheel-maroon: #901a4c;
+    --color-wheel-sun: #efc501;
+    --color-wheel-rose: #d6496f;
+    --color-glass: rgb(255 255 255 / 0.2);
+    --color-glass-strong: rgb(255 255 255 / 0.3);
+    --color-field: rgb(245 245 245 / 0.2);
+    --color-danger: #ff8fa3;
+}
+
+/* ---------- Spin the wheel ---------- */
+
+@layer base {
+    /*
+     * The design is a 1920x1080 artboard. Every size is written in rem (design px / 16), and the root
+     * font size follows the viewport, so the whole screen scales as one piece on any display.
+     * 16px at 1920x1080; never smaller than 9px so phones stay legible.
+     */
+    html {
+        color-scheme: dark;
+        font-size: clamp(9px, min(100vw / 120, 100svh / 67.5), 32px);
+    }
+
+    body {
+        background: #000;
+    }
+
+    :focus-visible {
+        outline: 3px solid var(--color-headline);
+        outline-offset: 3px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            transition: none !important;
+            animation: none !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
+
+@layer components {
+    /* Frosted pill used by every button on the board (Restart, Results, Spin, Done...). */
+    .pill {
+        @apply inline-flex min-w-[16.17rem] cursor-pointer items-center justify-center gap-5 rounded-[3.75rem] bg-glass px-10 py-5 text-[1.5rem] leading-normal font-semibold whitespace-nowrap text-white backdrop-blur-sm transition hover:bg-glass-strong active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-glass disabled:active:scale-100;
+    }
+
+    .pill-compact {
+        @apply min-w-0;
+    }
+
+    /* Frosted panel: wheel cards and dialogs. */
+    .glass-panel {
+        @apply rounded-[3.75rem] bg-glass text-white backdrop-blur-xl;
+    }
+
+    .field {
+        /* Phones: keep 16px text (no iOS focus zoom) and a 44px tap target. */
+        @apply h-[3.125rem] w-full rounded-[0.75rem] bg-field px-4 text-base text-white placeholder:text-white/70 focus:bg-glass-strong focus:outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-headline aria-invalid:outline-2 aria-invalid:outline-danger max-md:h-[44px] max-md:text-[16px];
+    }
+}
