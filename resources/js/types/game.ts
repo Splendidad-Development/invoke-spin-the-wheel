@@ -11,6 +11,12 @@ export type WheelState = {
     key: WheelKey;
     /** "Question" or "Challenge". */
     label: string;
+    /** Current round, starting at 1. */
+    round: number;
+    /** Rounds this wheel plays per game; each round lands on every segment once. */
+    rounds: number;
+    /** Every round has been played; the wheel is locked until the game restarts. */
+    finished: boolean;
     segments: WheelSegment[];
 };
 

@@ -46,12 +46,15 @@ it('shows both wheels with fresh segments from the seeded content', function () 
             ->has('wheels', 2)
             ->where('wheels.0.key', 'question')
             ->where('wheels.0.label', 'Question')
-            ->has('wheels.0.segments', 10)
-            ->where('wheels.1.key', 'challenge')
-            // Challenge 7 is switched off pending medical review.
-            ->has('wheels.1.segments', 9)
-            ->where('wheels.1.segments.6', ['position' => 8, 'used' => false])
+            ->has('wheels.0.segments', 20)
             ->where('wheels.0.segments.0', ['position' => 1, 'used' => false])
+            ->where('wheels.0.round', 1)
+            ->where('wheels.0.rounds', 1)
+            ->where('wheels.0.finished', false)
+            ->where('wheels.1.key', 'challenge')
+            ->has('wheels.1.segments', 10)
+            ->where('wheels.1.round', 1)
+            ->where('wheels.1.rounds', 2)
             ->where('players', [])
             ->where('results', []));
 });
@@ -75,20 +78,66 @@ it('lands on a prompt and returns its question, options and answer', function ()
         ->and(Spin::query()->sole()->wheel_prompt_id)->toBe($prompt->id);
 });
 
-it('does not repeat a segment until every segment on that wheel has come up', function () {
+it('returns a named challenge with no options', function () {
+    $response = spin(Game::factory()->create(), Wheel::Challenge);
+
+    $prompt = WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', $response['spin']['position'])->sole();
+
+    expect($response['spin'])->toMatchArray([
+        'title' => "Challenge {$prompt->position}: {$prompt->name}",
+        'body' => $prompt->body,
+        'options' => [],
+        'answer' => null,
+        'keyMessage' => null,
+    ]);
+});
+
+it('plays every question once, then the question wheel is finished', function () {
     $game = Game::factory()->create();
 
-    $active = [1, 2, 3, 4, 5, 6, 8, 9, 10];
+    $positions = collect(range(1, 20))->map(fn () => spin($game, Wheel::Question)['spin']['position']);
 
-    $positions = collect($active)->map(fn () => spin($game, Wheel::Challenge)['spin']['position']);
+    expect($positions->sort()->values()->all())->toBe(range(1, 20));
 
-    expect($positions->sort()->values()->all())->toBe($active);
+    $this->postJson(route('spins.store', $game), ['wheel' => 'question'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['wheel' => 'All questions have been played. Restart the game to play again.']);
 
-    // The round is complete, so the wheel is fresh again and the next spin still works.
     $this->get(route('game.show', $game))
-        ->assertInertia(fn (Assert $page) => $page->where('wheels.1.segments', fn ($segments) => collect($segments)->every(fn ($segment) => $segment['used'] === false)));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('wheels.0.finished', true)
+            ->where('wheels.0.segments', fn ($segments) => collect($segments)->every(fn ($segment) => $segment['used'] === true)));
+});
 
-    expect(spin($game, Wheel::Challenge)['spin']['position'])->toBeIn($active);
+it('goes round the challenge wheel twice, each round covering all ten in random order', function () {
+    $game = Game::factory()->create();
+
+    $first = collect(range(1, 10))->map(fn () => spin($game, Wheel::Challenge)['spin']['position']);
+
+    expect($first->sort()->values()->all())->toBe(range(1, 10));
+
+    // Round two starts with every segment fresh again.
+    $this->get(route('game.show', $game))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('wheels.1.round', 2)
+            ->where('wheels.1.finished', false)
+            ->where('wheels.1.segments', fn ($segments) => collect($segments)->every(fn ($segment) => $segment['used'] === false)));
+
+    $second = collect(range(1, 10))->map(fn () => spin($game, Wheel::Challenge)['spin']['position']);
+
+    expect($second->sort()->values()->all())->toBe(range(1, 10));
+
+    $this->postJson(route('spins.store', $game), ['wheel' => 'challenge'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['wheel' => 'All challenges have been played. Restart the game to play again.']);
+
+    $this->get(route('game.show', $game))
+        ->assertInertia(fn (Assert $page) => $page->where('wheels.1.round', 2)->where('wheels.1.finished', true));
+
+    // Restarting brings both wheels back.
+    $this->post(route('game.restart', $game));
+
+    expect(spin(Game::query()->latest('id')->first(), Wheel::Challenge)['spin']['position'])->toBeBetween(1, 10);
 });
 
 it('tracks each wheel separately', function () {
@@ -223,28 +272,55 @@ it('blocks spins and scores on a game that has been restarted', function () {
     $this->put(route('players.update', $ended), ['players' => []])->assertConflict();
 });
 
-it('seeds every prompt as a well-formed multiple-choice item', function () {
-    expect(WheelPrompt::query()->where('wheel', Wheel::Question)->count())->toBe(10)
-        ->and(WheelPrompt::query()->where('wheel', Wheel::Challenge)->count())->toBe(10);
+it('seeds all twenty questions as well-formed multiple-choice items', function () {
+    $questions = WheelPrompt::query()->onWheel(Wheel::Question)->get();
 
-    WheelPrompt::query()->each(function (WheelPrompt $prompt) {
+    expect($questions)->toHaveCount(20)
+        ->and($questions->pluck('position')->all())->toBe(range(1, 20));
+
+    $questions->each(function (WheelPrompt $prompt) {
         expect($prompt->body)->not->toBeEmpty()
+            ->and($prompt->name)->toBeNull()
             ->and($prompt->options)->toHaveCount(4)
             ->and(array_keys($prompt->lettered()))->toContain($prompt->answer);
     });
 });
 
-it('keeps the challenge with a contradictory answer off the wheel', function () {
-    expect(WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', 7)->sole()->is_active)->toBeFalse();
+it('seeds ten named challenges with no options', function () {
+    $challenges = WheelPrompt::query()->onWheel(Wheel::Challenge)->get();
+
+    expect($challenges)->toHaveCount(10)
+        ->and($challenges->first()->title())->toBe('Challenge 1: Sing It!');
+
+    $challenges->each(function (WheelPrompt $prompt) {
+        expect($prompt->name)->not->toBeEmpty()
+            ->and($prompt->body)->not->toBeEmpty()
+            ->and($prompt->options)->toBeNull()
+            ->and($prompt->answer)->toBeNull();
+    });
 });
 
-it('re-seeds in place: restores the document text and switches off unknown segments', function () {
+it('re-seeds in place: restores the text and switches off unknown segments', function () {
     WheelPrompt::query()->where('wheel', Wheel::Question)->where('position', 1)->update(['body' => 'Edited']);
-    WheelPrompt::factory()->create(['wheel' => Wheel::Question, 'position' => 11]);
+    WheelPrompt::factory()->create(['wheel' => Wheel::Challenge, 'position' => 11]);
 
     $this->seed(WheelPromptSeeder::class);
 
-    expect(WheelPrompt::query()->count())->toBe(21)
+    expect(WheelPrompt::query()->count())->toBe(31)
         ->and(WheelPrompt::query()->where('position', 1)->where('wheel', Wheel::Question)->value('body'))->toStartWith('According to SELECT-COMPARE')
-        ->and(WheelPrompt::query()->where('position', 11)->value('is_active'))->toBeFalse();
+        ->and(WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', 11)->value('is_active'))->toBeFalse();
+});
+
+it('turns old multiple-choice rows into plain challenges when re-seeded', function () {
+    WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', 3)
+        ->update(['options' => json_encode(['a', 'b', 'c', 'd']), 'answer' => 'B', 'key_message' => 'Old']);
+
+    $this->seed(WheelPromptSeeder::class);
+
+    $challenge = WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', 3)->sole();
+
+    expect($challenge->name)->toBe('Pass the Praise')
+        ->and($challenge->options)->toBeNull()
+        ->and($challenge->answer)->toBeNull()
+        ->and($challenge->key_message)->toBeNull();
 });

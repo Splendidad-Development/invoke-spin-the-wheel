@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property Wheel $wheel
  * @property int $position The segment number shown on the wheel, starting at 1.
+ * @property string|null $name Short name for a challenge, e.g. "Sing It!".
  * @property string $body
  * @property list<string>|null $options Choices in order; the first is "A".
  * @property string|null $answer Letter of the correct option, e.g. "C".
@@ -24,7 +25,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['wheel', 'position', 'body', 'options', 'answer', 'key_message', 'is_active'])]
+#[Fillable(['wheel', 'position', 'name', 'body', 'options', 'answer', 'key_message', 'is_active'])]
 class WheelPrompt extends Model
 {
     /** @use HasFactory<WheelPromptFactory> */
@@ -54,11 +55,13 @@ class WheelPrompt extends Model
     }
 
     /**
-     * The dialog title, e.g. "Question 5".
+     * The dialog title, e.g. "Question 5" or "Challenge 3: Pass the Praise".
      */
     public function title(): string
     {
-        return "{$this->wheel->label()} {$this->position}";
+        $title = "{$this->wheel->label()} {$this->position}";
+
+        return filled($this->name) ? "{$title}: {$this->name}" : $title;
     }
 
     /**

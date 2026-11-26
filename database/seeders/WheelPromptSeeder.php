@@ -7,12 +7,14 @@ use App\Wheel;
 use Illuminate\Database\Seeder;
 
 /**
- * Wheel content from "SPIN The wheel Questions .docx".
+ * Wheel content.
  *
- * The document holds two sets of ten multiple-choice items with no labels. The first set
- * (RA / GCA) goes on the Question wheel, the second (axSpA / PsA, styled as Heading 2 in the
- * document) on the Challenge wheel. Text is as written, with formatting cleaned up only:
- * stray spaces, broken lines and options that had run together.
+ * Question wheel: all twenty multiple-choice items from "SPIN The wheel Questions .docx".
+ * 1-10 are the document's first set (RA / GCA), 11-20 its second set (axSpA / PsA). Text is as
+ * written, with formatting cleaned up only: stray spaces, broken lines and options that had
+ * run together.
+ *
+ * Challenge wheel: ten team challenges supplied separately (no options or answer).
  *
  * Safe to re-run: rows are matched on wheel + position and overwritten, and any other
  * position on a seeded wheel is switched off.
@@ -31,11 +33,12 @@ class WheelPromptSeeder extends Seeder
                 WheelPrompt::query()->updateOrCreate(
                     ['wheel' => $wheel, 'position' => $position],
                     [
+                        'name' => $prompt['name'] ?? null,
                         'body' => $prompt['body'],
-                        'options' => $prompt['options'],
-                        'answer' => $prompt['answer'],
-                        'key_message' => $prompt['key_message'],
-                        'is_active' => $prompt['is_active'] ?? true,
+                        'options' => $prompt['options'] ?? null,
+                        'answer' => $prompt['answer'] ?? null,
+                        'key_message' => $prompt['key_message'] ?? null,
+                        'is_active' => true,
                     ],
                 );
             }
@@ -50,7 +53,7 @@ class WheelPromptSeeder extends Seeder
     /**
      * Wheel => [segment number => prompt].
      *
-     * @return array<string, array<int, array{body: string, options: list<string>, answer: string, key_message: string|null, is_active?: bool}>>
+     * @return array<string, array<int, array{name?: string, body: string, options?: list<string>, answer?: string, key_message?: string|null}>>
      */
     public static function prompts(): array
     {
@@ -141,16 +144,15 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'C',
                     'key_message' => 'At Week 12, 30% of patients achieved remission with RINVOQ + csDMARD(s) compared with 13.3% with abatacept + csDMARD(s).',
                 ],
-            ],
 
-            Wheel::Challenge->value => [
-                1 => [
+                // Second set in the document (axSpA / PsA).
+                11 => [
                     'body' => 'In SELECT-AXIS 1, approximately what proportion of bio-naïve AS patients treated with RINVOQ achieved ASDAS-CRP Low Disease Activity (LDA <2.1) by Week 14?',
                     'options' => ['~50%', '~35%', '~20%', '~75%'],
                     'answer' => 'A',
                     'key_message' => 'In SELECT-AXIS 1, ~50% of bio-naïve AS patients treated with RINVOQ achieved ASDAS-CRP Low Disease Activity (LDA <2.1) by Week 14.',
                 ],
-                2 => [
+                12 => [
                     'body' => 'For a Pioneer axSpA HCP, which RINVOQ message is MOST impactful?',
                     'options' => [
                         'Familiar MOA only',
@@ -161,7 +163,7 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'C',
                     'key_message' => "Core characteristics of a Pioneer axSpA HCP:\n• More recent medical training; mid-career physicians\n• Most proactive in keeping up to date with the field (attending conferences, involved in clinical trials, engaging with KOLs)",
                 ],
-                3 => [
+                13 => [
                     'body' => 'Which RINVOQ message best aligns with a Traditionalist axSpA HCP?',
                     'options' => [
                         'Early adoption across multiple indications',
@@ -172,14 +174,14 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'D',
                     'key_message' => "Core characteristics of a Traditionalist axSpA HCP:\n• More experienced physicians; practicing for many years\n• Most passive approach to keeping up to date with new developments in the field",
                 ],
-                4 => [
+                14 => [
                     // Audit: the options overlap ("< 50%" also covers "~33%" and "< 15%"). Needs a medical rewrite.
                     'body' => 'In axSpA Adelphi Real World Evidence, what was the reduction of pain percentage across TNF-RINVOQ groups?',
                     'options' => ['< 50%', '~33%', '< 15%', '> 70%'],
                     'answer' => 'A',
                     'key_message' => null,
                 ],
-                5 => [
+                15 => [
                     'body' => 'How is upadacitinib’s activity described in human cellular assays?',
                     'options' => [
                         'It preferentially inhibits signaling by JAK1 or JAK1/3, with functional selectivity over cytokine receptors that signal via pairs of JAK2',
@@ -190,7 +192,7 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'A',
                     'key_message' => 'The mechanism overview describes preferential inhibition of JAK1 or JAK1/3 signaling in human cellular assays.',
                 ],
-                6 => [
+                16 => [
                     'body' => 'Which statement best describes the role of JAK1 or JAK1/3 inhibition with RINVOQ in PsA and axSpA?',
                     'options' => [
                         'It reduces signaling of many cytokines involved in inflammation and associated signs and symptoms.',
@@ -201,22 +203,21 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'A',
                     'key_message' => 'JAK1 or JAK1/3 inhibition may reduce signaling of multiple cytokines involved in PsA and axSpA.',
                 ],
-                7 => [
-                    // Audit: switched off until medical review. The document marks C (~25%) as correct,
-                    // but its own key message says ~20% (option B), and "at Week." is missing the week.
+                17 => [
+                    // Audit: needs medical review. The document marks C (~25%) as correct, but its own
+                    // key message says ~20% (option B), and "at Week." is missing the week number.
                     'body' => 'In bio-naïve patients with active PsA, what proportion of SKYRIZI patients achieved Minimal Disease Activity (MDA) at Week 24?',
                     'options' => ['~10%', '~20%', '~25%', '~40%'],
                     'answer' => 'C',
                     'key_message' => 'In bio-naïve patients with active PsA, ~20% of SKYRIZI patients achieved Minimal Disease Activity (MDA) at Week.',
-                    'is_active' => false,
                 ],
-                8 => [
+                18 => [
                     'body' => 'At Week 152 in SELECT-PsA 1, approximately what proportion of patients treated with RINVOQ achieved DAPSA Low Disease Activity (LDA)?',
                     'options' => ['~40%', '~65–70%', '~55%', '~85%'],
                     'answer' => 'C',
                     'key_message' => 'At Week 152 in SELECT-PsA 1, ~55% of patients treated with RINVOQ achieved DAPSA Low Disease Activity (LDA).',
                 ],
-                9 => [
+                19 => [
                     'body' => 'What best describes the UPJOINT interim analysis?',
                     'options' => [
                         'Randomized double-blind clinical trial',
@@ -227,7 +228,7 @@ class WheelPromptSeeder extends Seeder
                     'answer' => 'D',
                     'key_message' => 'The UPJOINT interim analysis is an international, prospective, real-world observational study of RINVOQ in PsA.',
                 ],
-                10 => [
+                20 => [
                     'body' => 'In SELECT-AXIS 2, what percentage of nr-axSpA patients achieved ASDAS Low Disease Activity (LDA <2.1) at Week 14?',
                     'options' => [
                         '18% with RINVOQ vs 42% with placebo',
@@ -237,6 +238,49 @@ class WheelPromptSeeder extends Seeder
                     ],
                     'answer' => 'B',
                     'key_message' => 'In SELECT-AXIS 2, 42% of nr-axSpA patients achieved ASDAS Low Disease Activity (LDA <2.1) at Week 14 with RINVOQ vs 18% with placebo.',
+                ],
+            ],
+
+            Wheel::Challenge->value => [
+                1 => [
+                    'name' => 'Sing It!',
+                    'body' => 'Sing the last song you played for 10 seconds.',
+                ],
+                2 => [
+                    'name' => 'One Rheum, One Word',
+                    'body' => 'Describe the One Rheum team in just ONE word. No repeats from teammates!',
+                ],
+                3 => [
+                    'name' => 'Pass the Praise',
+                    'body' => 'Give a teammate a genuine compliment using exactly five words.',
+                ],
+                4 => [
+                    'name' => 'Breaking News',
+                    'body' => 'Act like a news reporter announcing that the One Rheum team has achieved an incredible milestone.',
+                ],
+                5 => [
+                    'name' => 'Invisible Object',
+                    'body' => 'Pretend to use an invisible object. If your team identifies it, you win.',
+                ],
+                6 => [
+                    'name' => 'Alphabet Madness',
+                    'body' => 'Name five foods starting with the same letter in 15 seconds.',
+                ],
+                7 => [
+                    'name' => 'Commercial Break',
+                    'body' => 'Create a funny 15-second advertisement for coffee.',
+                ],
+                8 => [
+                    'name' => 'Team Selfie',
+                    'body' => 'Gather your teammates for the funniest group selfie possible.',
+                ],
+                9 => [
+                    'name' => 'Royal Announcement',
+                    'body' => 'Announce lunchtime as if it were a royal ceremony.',
+                ],
+                10 => [
+                    'name' => 'Blind Drawing',
+                    'body' => 'Draw a cat with your eyes closed.',
                 ],
             ],
         ];

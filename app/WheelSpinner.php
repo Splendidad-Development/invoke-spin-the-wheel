@@ -12,15 +12,16 @@ use Illuminate\Validation\ValidationException;
 /**
  * Picks where a wheel lands. The server decides, the browser only animates to the answer.
  *
- * Each wheel works through its prompts in rounds: a segment can't come up again until every
- * other segment on that wheel has had its turn, then the wheel starts a fresh round.
+ * Each wheel works through its prompts in rounds: within a round every segment comes up once,
+ * in random order. A wheel plays a fixed number of rounds per game (see Wheel::rounds());
+ * after the last one it is finished until the game restarts.
  */
 class WheelSpinner
 {
     /**
      * Spin one wheel for a game and record the result.
      *
-     * @throws ValidationException when the wheel has no active prompts.
+     * @throws ValidationException when the wheel has no active prompts or has played all its rounds.
      */
     public function spin(Game $game, Wheel $wheel): Spin
     {
@@ -32,15 +33,22 @@ class WheelSpinner
 
             if ($prompts->isEmpty()) {
                 throw ValidationException::withMessages([
-                    'wheel' => "There are no {$wheel->label()} prompts on this wheel yet.",
+                    'wheel' => "There are no {$wheel->plural()} on this wheel yet.",
                 ]);
             }
 
-            $usedIds = $this->usedPromptIds($game, $wheel, $prompts);
-            $candidates = $prompts->reject(fn (WheelPrompt $prompt): bool => in_array($prompt->id, $usedIds, true));
+            $progress = $this->progress($game, $wheel, $prompts);
+
+            if ($progress['finished']) {
+                throw ValidationException::withMessages([
+                    'wheel' => "All {$wheel->plural()} have been played. Restart the game to play again.",
+                ]);
+            }
 
             /** @var WheelPrompt $prompt */
-            $prompt = ($candidates->isEmpty() ? $prompts : $candidates)->random();
+            $prompt = $prompts
+                ->reject(fn (WheelPrompt $prompt): bool => in_array($prompt->id, $progress['usedIds'], true))
+                ->random();
 
             $spin = $game->spins()->create([
                 'wheel_prompt_id' => $prompt->id,
@@ -52,9 +60,9 @@ class WheelSpinner
     }
 
     /**
-     * Every wheel with its segments and whether each one has come up this round.
+     * Every wheel with its segments and where it is in its rounds.
      *
-     * @return list<array{key: string, label: string, segments: list<array{position: int, used: bool}>}>
+     * @return list<array{key: string, label: string, round: int, rounds: int, finished: bool, segments: list<array{position: int, used: bool}>}>
      */
     public function wheels(Game $game): array
     {
@@ -62,20 +70,23 @@ class WheelSpinner
     }
 
     /**
-     * @return array{key: string, label: string, segments: list<array{position: int, used: bool}>}
+     * @return array{key: string, label: string, round: int, rounds: int, finished: bool, segments: list<array{position: int, used: bool}>}
      */
     public function wheel(Game $game, Wheel $wheel): array
     {
         $prompts = $this->prompts($wheel);
-        $usedIds = $this->usedPromptIds($game, $wheel, $prompts);
+        $progress = $this->progress($game, $wheel, $prompts);
 
         return [
             'key' => $wheel->value,
             'label' => $wheel->label(),
+            'round' => $progress['round'],
+            'rounds' => $wheel->rounds(),
+            'finished' => $progress['finished'],
             'segments' => array_values($prompts
                 ->map(fn (WheelPrompt $prompt): array => [
                     'position' => $prompt->position,
-                    'used' => in_array($prompt->id, $usedIds, true),
+                    'used' => $progress['finished'] || in_array($prompt->id, $progress['usedIds'], true),
                 ])
                 ->all()),
         ];
@@ -90,16 +101,16 @@ class WheelSpinner
     }
 
     /**
-     * Prompts already landed on in the wheel's current round.
-     *
-     * Replays the game's spins in order; once every active prompt has come up, the round resets.
+     * Replay the game's spins on this wheel to find the current round and what it has used.
+     * A round completes once every active prompt has come up.
      *
      * @param  Collection<int, WheelPrompt>  $prompts
-     * @return list<int>
+     * @return array{round: int, finished: bool, usedIds: list<int>}
      */
-    protected function usedPromptIds(Game $game, Wheel $wheel, Collection $prompts): array
+    protected function progress(Game $game, Wheel $wheel, Collection $prompts): array
     {
         $activeIds = $prompts->modelKeys();
+        $completedRounds = 0;
         $used = [];
 
         $spunIds = $game->spins()
@@ -115,10 +126,17 @@ class WheelSpinner
             $used[$promptId] = true;
 
             if (count($used) >= count($activeIds)) {
+                $completedRounds++;
                 $used = [];
             }
         }
 
-        return array_keys($used);
+        $finished = $activeIds !== [] && $completedRounds >= $wheel->rounds();
+
+        return [
+            'round' => min($completedRounds + 1, $wheel->rounds()),
+            'finished' => $finished,
+            'usedIds' => array_keys($used),
+        ];
     }
 }
