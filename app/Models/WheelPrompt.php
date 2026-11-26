@@ -17,11 +17,14 @@ use Illuminate\Support\Carbon;
  * @property Wheel $wheel
  * @property int $position The segment number shown on the wheel, starting at 1.
  * @property string $body
+ * @property list<string>|null $options Choices in order; the first is "A".
+ * @property string|null $answer Letter of the correct option, e.g. "C".
+ * @property string|null $key_message Read out after the answer is revealed.
  * @property bool $is_active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['wheel', 'position', 'body', 'is_active'])]
+#[Fillable(['wheel', 'position', 'body', 'options', 'answer', 'key_message', 'is_active'])]
 class WheelPrompt extends Model
 {
     /** @use HasFactory<WheelPromptFactory> */
@@ -35,6 +38,7 @@ class WheelPrompt extends Model
         return [
             'wheel' => Wheel::class,
             'position' => 'integer',
+            'options' => 'array',
             'is_active' => 'boolean',
         ];
     }
@@ -55,5 +59,18 @@ class WheelPrompt extends Model
     public function title(): string
     {
         return "{$this->wheel->label()} {$this->position}";
+    }
+
+    /**
+     * Options keyed by their letter: ["A" => "45%", "B" => "52%", ...].
+     *
+     * @return array<string, string>
+     */
+    public function lettered(): array
+    {
+        $options = $this->options ?? [];
+        $letters = array_slice(range('A', 'Z'), 0, count($options));
+
+        return array_combine($letters, $options);
     }
 }

@@ -22,6 +22,9 @@ class WheelPromptFactory extends Factory
             'wheel' => Wheel::Question,
             'position' => fake()->unique()->numberBetween(1, 200),
             'body' => fake()->sentence(),
+            'options' => ['Option one', 'Option two', 'Option three', 'Option four'],
+            'answer' => fake()->randomElement(['A', 'B', 'C', 'D']),
+            'key_message' => fake()->sentence(),
             'is_active' => true,
         ];
     }

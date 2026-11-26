@@ -21,6 +21,12 @@ export type SpinResult = {
     /** e.g. "Question 5". */
     title: string;
     body: string;
+    /** Multiple-choice options in order; empty for an open question. */
+    options: { letter: string; text: string }[];
+    /** Letter of the correct option. */
+    answer: string | null;
+    /** Read out after the answer is revealed. Lines starting with "•" are list items. */
+    keyMessage: string | null;
 };
 
 export type SpinResponse = {

@@ -29,6 +29,12 @@ class SpinController extends Controller
                 'position' => $spin->prompt->position,
                 'title' => $spin->prompt->title(),
                 'body' => $spin->prompt->body,
+                'options' => collect($spin->prompt->lettered())
+                    ->map(fn (string $text, string $letter): array => ['letter' => $letter, 'text' => $text])
+                    ->values()
+                    ->all(),
+                'answer' => $spin->prompt->answer,
+                'keyMessage' => $spin->prompt->key_message,
             ],
             'wheel' => $spinner->wheel($game, $wheel),
         ], Response::HTTP_CREATED);

@@ -36,7 +36,7 @@ it('opens a new game on "Get started" and resumes it afterwards', function () {
     expect(Game::query()->count())->toBe(1);
 });
 
-it('shows both wheels with eight fresh segments', function () {
+it('shows both wheels with fresh segments from the seeded content', function () {
     $game = Game::factory()->create();
 
     $this->get(route('game.show', $game))
@@ -46,14 +46,17 @@ it('shows both wheels with eight fresh segments', function () {
             ->has('wheels', 2)
             ->where('wheels.0.key', 'question')
             ->where('wheels.0.label', 'Question')
+            ->has('wheels.0.segments', 10)
             ->where('wheels.1.key', 'challenge')
-            ->has('wheels.1.segments', 8)
+            // Challenge 7 is switched off pending medical review.
+            ->has('wheels.1.segments', 9)
+            ->where('wheels.1.segments.6', ['position' => 8, 'used' => false])
             ->where('wheels.0.segments.0', ['position' => 1, 'used' => false])
             ->where('players', [])
             ->where('results', []));
 });
 
-it('lands on a prompt and returns its text', function () {
+it('lands on a prompt and returns its question, options and answer', function () {
     $game = Game::factory()->create();
 
     $response = spin($game, Wheel::Question);
@@ -64,22 +67,28 @@ it('lands on a prompt and returns its text', function () {
         'wheel' => 'question',
         'title' => "Question {$prompt->position}",
         'body' => $prompt->body,
-    ])->and(collect($response['wheel']['segments'])->firstWhere('position', $prompt->position)['used'])->toBeTrue()
+        'answer' => $prompt->answer,
+        'keyMessage' => $prompt->key_message,
+    ])->and($response['spin']['options'])->toHaveCount(4)
+        ->and($response['spin']['options'][0])->toBe(['letter' => 'A', 'text' => $prompt->options[0]])
+        ->and(collect($response['wheel']['segments'])->firstWhere('position', $prompt->position)['used'])->toBeTrue()
         ->and(Spin::query()->sole()->wheel_prompt_id)->toBe($prompt->id);
 });
 
 it('does not repeat a segment until every segment on that wheel has come up', function () {
     $game = Game::factory()->create();
 
-    $positions = collect(range(1, 8))->map(fn () => spin($game, Wheel::Challenge)['spin']['position']);
+    $active = [1, 2, 3, 4, 5, 6, 8, 9, 10];
 
-    expect($positions->sort()->values()->all())->toBe(range(1, 8));
+    $positions = collect($active)->map(fn () => spin($game, Wheel::Challenge)['spin']['position']);
+
+    expect($positions->sort()->values()->all())->toBe($active);
 
     // The round is complete, so the wheel is fresh again and the next spin still works.
     $this->get(route('game.show', $game))
         ->assertInertia(fn (Assert $page) => $page->where('wheels.1.segments', fn ($segments) => collect($segments)->every(fn ($segment) => $segment['used'] === false)));
 
-    expect(spin($game, Wheel::Challenge)['spin']['position'])->toBeBetween(1, 8);
+    expect(spin($game, Wheel::Challenge)['spin']['position'])->toBeIn($active);
 });
 
 it('tracks each wheel separately', function () {
@@ -212,4 +221,30 @@ it('blocks spins and scores on a game that has been restarted', function () {
 
     $this->postJson(route('spins.store', $ended), ['wheel' => 'question'])->assertConflict();
     $this->put(route('players.update', $ended), ['players' => []])->assertConflict();
+});
+
+it('seeds every prompt as a well-formed multiple-choice item', function () {
+    expect(WheelPrompt::query()->where('wheel', Wheel::Question)->count())->toBe(10)
+        ->and(WheelPrompt::query()->where('wheel', Wheel::Challenge)->count())->toBe(10);
+
+    WheelPrompt::query()->each(function (WheelPrompt $prompt) {
+        expect($prompt->body)->not->toBeEmpty()
+            ->and($prompt->options)->toHaveCount(4)
+            ->and(array_keys($prompt->lettered()))->toContain($prompt->answer);
+    });
+});
+
+it('keeps the challenge with a contradictory answer off the wheel', function () {
+    expect(WheelPrompt::query()->where('wheel', Wheel::Challenge)->where('position', 7)->sole()->is_active)->toBeFalse();
+});
+
+it('re-seeds in place: restores the document text and switches off unknown segments', function () {
+    WheelPrompt::query()->where('wheel', Wheel::Question)->where('position', 1)->update(['body' => 'Edited']);
+    WheelPrompt::factory()->create(['wheel' => Wheel::Question, 'position' => 11]);
+
+    $this->seed(WheelPromptSeeder::class);
+
+    expect(WheelPrompt::query()->count())->toBe(21)
+        ->and(WheelPrompt::query()->where('position', 1)->where('wheel', Wheel::Question)->value('body'))->toStartWith('According to SELECT-COMPARE')
+        ->and(WheelPrompt::query()->where('position', 11)->value('is_active'))->toBeFalse();
 });
