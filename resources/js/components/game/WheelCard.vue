@@ -15,22 +15,11 @@ const emit = defineEmits<{ spin: [] }>();
 
 const spinner = ref<InstanceType<typeof SpinWheel> | null>(null);
 
-const noun = computed(() => `${props.wheel.label.toLowerCase()}s`);
-
-/** e.g. "14 of 20 left" or "Round 2 of 2 · 7 left". */
-const status = computed(() => {
-    if (props.wheel.finished) {
-        return `All ${noun.value} played. Restart to play again.`;
-    }
-
-    const total = props.wheel.segments.length;
-    const left = props.wheel.segments.filter((segment) => !segment.used).length;
-    const remaining = `${left} of ${total} left`;
-
-    return props.wheel.rounds > 1
-        ? `Round ${props.wheel.round} of ${props.wheel.rounds} · ${remaining}`
-        : remaining;
-});
+/** Only shown once the wheel has played all its rounds, to explain the disabled Spin button. */
+const finishedMessage = computed(
+    () =>
+        `All ${props.wheel.label.toLowerCase()}s played. Restart to play again.`,
+);
 
 defineExpose({
     spinTo: (position: number): Promise<void> =>
@@ -52,11 +41,11 @@ defineExpose({
                 <strong class="font-bold">{{ wheel.label }}</strong>
             </h2>
             <p
-                class="m-0 text-[1.0625rem] leading-normal font-medium"
-                :class="wheel.finished ? 'text-headline' : 'text-white/75'"
-                aria-live="polite"
+                v-if="wheel.finished"
+                class="m-0 text-[1.0625rem] leading-normal font-medium text-headline"
+                role="status"
             >
-                {{ status }}
+                {{ finishedMessage }}
             </p>
         </div>
 
