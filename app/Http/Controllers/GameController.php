@@ -8,6 +8,7 @@ use App\WheelSpinner;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class GameController extends Controller
 {
@@ -48,13 +49,16 @@ class GameController extends Controller
     }
 
     /**
-     * End the current game (spins and scores are kept) and open a fresh one.
+     * End the current game (spins and scores are kept), open a fresh one and go back to the first page.
+     * It is a full page load, so nothing from the old game (wheel positions, dialogs, sounds) stays in the browser.
      */
-    public function restart(Game $game): RedirectResponse
+    public function restart(Game $game): HttpResponse
     {
-        $next = $game->hasEnded() ? Game::current() : $game->restart();
+        if (! $game->hasEnded()) {
+            $game->restart();
+        }
 
-        return to_route('game.show', $next);
+        return Inertia::location(route('game.welcome'));
     }
 
     /**

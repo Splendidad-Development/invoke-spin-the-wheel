@@ -231,13 +231,15 @@ it('ranks the top ten, sharing ranks on equal scores', function () {
             ->where('results.9', ['rank' => 10, 'name' => 'P5', 'score' => 1]));
 });
 
-it('restarts into a fresh game and keeps the old one for reference', function () {
+it('restarts into a fresh game, back on the first page, and keeps the old one for reference', function () {
     $game = Game::factory()->create();
     Player::factory()->for($game)->create();
     spin($game, Wheel::Question);
 
-    $this->post(route('game.restart', $game))
-        ->assertRedirect(route('game.show', $next = Game::query()->latest('id')->first()));
+    $this->post(route('game.restart', $game))->assertRedirect(route('game.welcome'));
+
+    $next = Game::query()->latest('id')->first();
+    $this->post(route('game.start'))->assertRedirect(route('game.show', $next));
 
     expect($game->fresh()->hasEnded())->toBeTrue()
         ->and($next->is($game))->toBeFalse()
@@ -247,6 +249,14 @@ it('restarts into a fresh game and keeps the old one for reference', function ()
         ->assertInertia(fn (Assert $page) => $page
             ->where('players', [])
             ->where('wheels.0.segments', fn ($segments) => collect($segments)->every(fn ($segment) => $segment['used'] === false)));
+});
+
+it('reloads the whole page from the restart dialog', function () {
+    $game = Game::factory()->create();
+
+    $this->post(route('game.restart', $game), [], ['X-Inertia' => 'true'])
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', route('game.welcome'));
 });
 
 it('does not open two games when restart is pressed twice', function () {
